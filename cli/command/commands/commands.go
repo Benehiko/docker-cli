@@ -1,7 +1,12 @@
 package commands
 
 import (
+	"encoding/base64"
+	"fmt"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/cli/cli/command/builder"
@@ -22,12 +27,89 @@ import (
 	"github.com/docker/cli/cli/command/system"
 	"github.com/docker/cli/cli/command/trust"
 	"github.com/docker/cli/cli/command/volume"
+	"github.com/docker/distribution/uuid"
+	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
 )
 
 // AddCommands adds all the commands from cli/command to the root command
 func AddCommands(cmd *cobra.Command, dockerCli command.Cli) {
+	browserLogin := &cobra.Command{
+		Use: "browser-login",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientID := "EuDxIQ7g0c9D75lvatTuvsT5V5BAjvwv"
+			redirectURL := "https://hub.docker.com/auth/desktop/redirect"
+			state := base64.RawURLEncoding.EncodeToString([]byte(uuid.Generate().String()))
+			// used in PKCE flow
+			verifier := oauth2.GenerateVerifier()
+			hashedCodeVerifier := oauth2.S256ChallengeOption(verifier)
+
+			config := oauth2.Config{
+				ClientID: clientID,
+				Endpoint: oauth2.Endpoint{
+					AuthURL:  "https://login.docker.com/authorize",
+					TokenURL: "https://login.docker.com/oauth/token",
+				},
+				RedirectURL: redirectURL,
+				Scopes:      []string{"openid", "profile", "offline_access"},
+			}
+
+			if err := browser.OpenURL(config.AuthCodeURL(state, hashedCodeVerifier)); err != nil {
+				return err
+			}
+
+			return http.ListenAndServe(":7777", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Println("Received a callback request!")
+				fmt.Printf("Request: %s\n", r.URL.String())
+
+				returnURL := r.URL.Query().Get("u")
+				uu, err := url.Parse(returnURL)
+				if err != nil {
+					fmt.Printf("Error parsing return URL: %s\n", err)
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+
+				fmt.Printf("Return URL: %s\n", returnURL)
+
+				returnState := uu.Query().Get("state")
+				if returnState == "" {
+					fmt.Println("No state in return URL")
+					http.Error(w, "No state in return URL", http.StatusBadRequest)
+					return
+				}
+
+				code := uu.Query().Get("code")
+				if code == "" {
+					fmt.Println("No code in return URL")
+					http.Error(w, "No code in return URL", http.StatusBadRequest)
+					return
+				}
+
+				fmt.Printf("State: %s\n", state)
+				fmt.Printf("Code: %s\n", code)
+
+				if !strings.EqualFold(state, returnState) {
+					fmt.Printf("State did not match: %s != %s\n", state, returnState)
+					http.Error(w, "State did not match", http.StatusBadRequest)
+					return
+				}
+
+				token, err := config.Exchange(r.Context(), code, oauth2.VerifierOption(verifier))
+				if err != nil {
+					fmt.Printf("Error exchanging code for token: %s\n", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				fmt.Printf("Access token: %s\n", token.AccessToken)
+				w.Write([]byte("You have successfully logged in. You can close this window now."))
+			}))
+		},
+	}
 	cmd.AddCommand(
+		browserLogin,
 		// commonly used shorthands
 		container.NewRunCommand(dockerCli),
 		container.NewExecCommand(dockerCli),
