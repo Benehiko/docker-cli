@@ -123,12 +123,10 @@ func PromptForInput(ctx context.Context, ins *streams.In, outs *streams.Out, mes
 	result := make(chan string)
 
 	go func() {
-		reader := bufio.NewReader(ins)
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			result <- ""
+		scanner := bufio.NewScanner(ins)
+		if scanner.Scan() {
+			result <- strings.TrimSpace(scanner.Text())
 		}
-		result <- strings.TrimSpace(line)
 	}()
 
 	select {
