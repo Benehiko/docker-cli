@@ -82,7 +82,6 @@ func TestValidateOutputPath(t *testing.T) {
 }
 
 func TestPromptForInput(t *testing.T) {
-
 	t.Run("case=cancelling the context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
