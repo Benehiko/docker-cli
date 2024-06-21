@@ -77,16 +77,20 @@ func PrettyPrint(i any) string {
 
 var ErrPromptTerminated = errdefs.Cancelled(errors.New("prompt terminated"))
 
-type promptOptions struct {
-	disableEcho bool
-}
-
-type PromptOptions func(*promptOptions)
-
-func WithHideUserInput(t bool) PromptOptions {
-	return func(p *promptOptions) {
-		p.disableEcho = t
+// DisableInputEcho disables input echo on the provided io.ReadCloser.
+// This is useful when the user provides sensitive information like passwords.
+// The function returns a restore function that should be called to restore the
+// terminal state.
+func DisableInputEcho(in io.ReadCloser) (restore func() error, err error) {
+	ins := streams.NewIn(in)
+	oldState, err := term.SaveState(ins.FD())
+	if err != nil {
+		return nil, err
 	}
+	restore = func() error {
+		return term.RestoreTerminal(ins.FD(), oldState)
+	}
+	return restore, term.DisableEcho(ins.FD(), oldState)
 }
 
 // PromptForInput requests input from the user.
@@ -96,29 +100,10 @@ func WithHideUserInput(t bool) PromptOptions {
 // When the prompt returns an error, the caller should propagate the error up
 // the stack and close the io.Reader used for the prompt which will prevent the
 // background goroutine from blocking indefinitely.
-func PromptForInput(ctx context.Context, ins *streams.In, outs *streams.Out, message string, opts ...PromptOptions) (string, error) {
-	options := promptOptions{}
-	for _, o := range opts {
-		o(&options)
-	}
+func PromptForInput(ctx context.Context, in io.ReadCloser, out io.Writer, message string) (string, error) {
+	_, _ = fmt.Fprint(out, message)
 
-	_, _ = fmt.Fprint(outs, message)
-
-	if options.disableEcho {
-		oldState, err := term.SaveState(ins.FD())
-		if err != nil {
-			return "", err
-		}
-		_ = term.DisableEcho(ins.FD(), oldState)
-		defer func() {
-			_ = term.RestoreTerminal(ins.FD(), oldState)
-		}()
-	}
-
-	// On Windows, force the use of the regular OS stdin stream.
-	if runtime.GOOS == "windows" {
-		ins = streams.NewIn(os.Stdin)
-	}
+	ins := streams.NewIn(in)
 
 	result := make(chan string)
 
@@ -131,7 +116,7 @@ func PromptForInput(ctx context.Context, ins *streams.In, outs *streams.Out, mes
 
 	select {
 	case <-ctx.Done():
-		_, _ = fmt.Fprintln(outs, "")
+		_, _ = fmt.Fprintln(out, "")
 		return "", ErrPromptTerminated
 	case r := <-result:
 		return r, nil

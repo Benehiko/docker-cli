@@ -142,8 +142,13 @@ func ConfigureAuth(ctx context.Context, cli Cli, flUser, flPassword string, auth
 		return errors.Errorf("Error: Non-null Username Required")
 	}
 	if flPassword == "" {
-		var err error
-		flPassword, err = PromptForInput(ctx, cli.In(), cli.Out(), "Password: ", WithHideUserInput(true))
+		restoreInput, err := DisableInputEcho(cli.In())
+		if err != nil {
+			return err
+		}
+		defer restoreInput()
+
+		flPassword, err = PromptForInput(ctx, cli.In(), cli.Out(), "Password: ")
 		if err != nil {
 			return err
 		}
