@@ -193,10 +193,10 @@ func TestLoginTermination(t *testing.T) {
 	p, tty, err := pty.Open()
 	assert.NilError(t, err)
 
-	defer func() {
+	t.Cleanup(func() {
 		_ = tty.Close()
 		_ = p.Close()
-	}()
+	})
 
 	cli := test.NewFakeCli(&fakeClient{}, func(fc *test.FakeCli) {
 		fc.SetOut(streams.NewOut(tty))

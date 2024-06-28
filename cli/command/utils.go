@@ -77,12 +77,11 @@ func PrettyPrint(i any) string {
 
 var ErrPromptTerminated = errdefs.Cancelled(errors.New("prompt terminated"))
 
-// DisableInputEcho disables input echo on the provided io.ReadCloser.
+// DisableInputEcho disables input echo on the provided streams.In.
 // This is useful when the user provides sensitive information like passwords.
 // The function returns a restore function that should be called to restore the
 // terminal state.
-func DisableInputEcho(in io.ReadCloser) (restore func() error, err error) {
-	ins := streams.NewIn(in)
+func DisableInputEcho(ins *streams.In) (restore func() error, err error) {
 	oldState, err := term.SaveState(ins.FD())
 	if err != nil {
 		return nil, err
@@ -100,15 +99,12 @@ func DisableInputEcho(in io.ReadCloser) (restore func() error, err error) {
 // When the prompt returns an error, the caller should propagate the error up
 // the stack and close the io.Reader used for the prompt which will prevent the
 // background goroutine from blocking indefinitely.
-func PromptForInput(ctx context.Context, in io.ReadCloser, out io.Writer, message string) (string, error) {
+func PromptForInput(ctx context.Context, in io.Reader, out io.Writer, message string) (string, error) {
 	_, _ = fmt.Fprint(out, message)
 
-	ins := streams.NewIn(in)
-
 	result := make(chan string)
-
 	go func() {
-		scanner := bufio.NewScanner(ins)
+		scanner := bufio.NewScanner(in)
 		if scanner.Scan() {
 			result <- strings.TrimSpace(scanner.Text())
 		}
