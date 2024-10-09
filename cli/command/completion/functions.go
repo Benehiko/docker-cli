@@ -186,7 +186,8 @@ type ImageTags struct {
 	Results []Image `json:"results"`
 }
 
-func Images(_ *cobra.Command, arg []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func Images(cmd *cobra.Command, arg []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
 	c := &http.Client{}
 
 	if imageName, imageTag, ok := strings.Cut(toComplete, ":"); ok {
@@ -201,7 +202,7 @@ func Images(_ *cobra.Command, arg []string, toComplete string) ([]string, cobra.
 		q.Set("name", imageTag)
 		u.RawQuery = q.Encode()
 
-		req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 		if err != nil {
 			logrus.Errorf("Error creating hub image tags request: %v", err)
 			return nil, cobra.ShellCompDirectiveNoFileComp
@@ -240,7 +241,7 @@ func Images(_ *cobra.Command, arg []string, toComplete string) ([]string, cobra.
 	q.Set("size", "25")
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		logrus.Errorf("Error creating hub image search request: %v", err)
 		return nil, cobra.ShellCompDirectiveNoFileComp

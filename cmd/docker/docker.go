@@ -89,11 +89,6 @@ func newDockerCommand(dockerCli *command.DockerCli) *cli.TopLevelCommand {
 		},
 		Version:               fmt.Sprintf("%s, build %s", version.Version, version.GitCommit),
 		DisableFlagsInUseLine: true,
-		CompletionOptions: cobra.CompletionOptions{
-			DisableDefaultCmd:   false,
-			HiddenDefaultCmd:    true,
-			DisableDescriptions: true,
-		},
 	}
 	cmd.SetIn(dockerCli.In())
 	cmd.SetOut(dockerCli.Out())

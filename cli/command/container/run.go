@@ -25,6 +25,7 @@ type runOptions struct {
 	detach     bool
 	sigProxy   bool
 	detachKeys string
+	tui        bool
 }
 
 // NewRunCommand create a new `docker run` command
@@ -37,13 +38,38 @@ func NewRunCommand(dockerCli command.Cli) *cobra.Command {
 		Short: "Create and run a new container from an image",
 		Args:  cli.RequiresMinArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			copts.Image = args[0]
+			replacer := strings.NewReplacer("(local)", "", "(remote)", "")
+			copts.Image = replacer.Replace(args[0])
 			if len(args) > 1 {
 				copts.Args = args[1:]
 			}
+			// if options.tui {
+			// 	return runTUI(cmd.Context(), dockerCli, cmd.Flags(), &options, copts)
+			// }
 			return runRun(cmd.Context(), dockerCli, cmd.Flags(), &options, copts)
 		},
-		ValidArgsFunction: completion.ImageNames(dockerCli),
+		// ValidArgsFunction: completion.ImageNames(dockerCli),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			// if len(args) > 0 {
+			// 	return nil, cobra.ShellCompDirectiveNoFileComp
+			// }
+			local, _ := completion.ImageNames(dockerCli)(cmd, args, toComplete)
+			var allUnique = make(map[string]struct{})
+			var all []string
+			for _, c := range local {
+				allUnique[c] = struct{}{}
+				all = append(all, c+"\tlocal")
+			}
+
+			remote, _ := completion.Images(cmd, args, toComplete)
+			for _, c := range remote {
+				if _, ok := allUnique[c]; !ok {
+					all = append(all, c+"\tremote")
+				}
+			}
+
+			return all, cobra.ShellCompDirectiveKeepOrder | cobra.ShellCompDirectiveDefault
+		},
 		Annotations: map[string]string{
 			"category-top": "1",
 			"aliases":      "docker container run, docker run",
@@ -60,6 +86,7 @@ func NewRunCommand(dockerCli command.Cli) *cobra.Command {
 	flags.StringVar(&options.detachKeys, "detach-keys", "", "Override the key sequence for detaching a container")
 	flags.StringVar(&options.pull, "pull", PullImageMissing, `Pull image before running ("`+PullImageAlways+`", "`+PullImageMissing+`", "`+PullImageNever+`")`)
 	flags.BoolVarP(&options.quiet, "quiet", "q", false, "Suppress the pull output")
+	flags.BoolVarP(&options.tui, "tui", "", false, "Enable TUI mode")
 
 	// Add an explicit help that doesn't have a `-h` to prevent the conflict
 	// with hostname
